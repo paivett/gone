@@ -18,39 +18,66 @@ KEEP IT SIMPLE. REPEAT. SIMPLE.
 
 '''
 
-# List of builtin types.  These will get added to the symbol table
-builtin_types = [ 'int', 'float', 'string' ]
+class Type():
+    """Base class for our type system"""
 
-# Dict mapping all valid binary operations to a result type
-_supported_binops = {
-    ('int', '+', 'int') : 'int',
-    ('int', '-', 'int') : 'int',
-    # You define
-    }
+    @classmethod
+    def binop_type(cls, op, right_type):
+        """Returns the type of applying the binary operator with the current
+        type and the type of the right operand, or returns None if the
+        operation is not valid"""
+        return None
 
-# Dict mapping all valid unary operations to result type
-_supported_unaryops = {
-    ('-', 'int') : 'int',
-    # You define
-    }
-    
-def check_binop(left_type, op, right_type):
-    ''' 
-    Check the validity of a binary operator. 
-    '''
-    return _supported_binops.get((left_type, op, right_type))
+    @classmethod
+    def unaryop_type(cls, op):
+        """Returns the type of applying the unary operator to the current type"""
+        return None
 
-def check_unaryop(op, type):
-    '''
-    Check the validity of a unary operator. 
-    '''
-    return _supported_unaryops.get((op, type))
+    @classmethod
+    def get_by_name(cls, type_name):
+        for type_cls in cls.__subclasses__():
+            if type_cls.name == type_name:
+                return type_cls
 
+        return None
 
+class FloatType(Type):
+    name = "float"
+    binary_operators = ["+", "-", "*", "/"]
+    unary_operators = ["+", "-"]
 
+    @classmethod
+    def binop_type(cls, op, right_type):
+        if op in cls.binary_operators and issubclass(right_type, FloatType):
+            return FloatType
 
-          
+        return None
 
+    @classmethod
+    def unaryop_supported(cls, op):
+        if op in cls.unary_operators:
+            return FloatType
 
+        return None
 
+class IntType(Type):
+    name = "int"
+    binary_operators = ["+", "-", "*", "/"]
+    unary_operators = ["+", "-"]
 
+    @classmethod
+    def binop_type(cls, op, right_type):
+        if op in cls.binary_operators and issubclass(right_type, IntType):
+            return IntType
+
+        return None
+
+    @classmethod
+    def unaryop_supported(cls, op):
+        if op in cls.unary_operators:
+            return IntType
+
+        return None
+
+class CharType(Type):
+    name = "char"
