@@ -21,7 +21,7 @@ from .errors import errors_reported
 _rtlib = os.path.join(os.path.dirname(__file__), 'gonert.c')
 
 # clang installation
-CLANG = 'clang
+CLANG = 'clang'
 
 def main():
     if len(sys.argv) != 2:

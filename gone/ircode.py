@@ -224,7 +224,7 @@ class GenerateCode(ast.NodeVisitor):
             # To account for the fact that the machine code does not support
             # unary operations, we must load a 0 into a new register first
             zero_target = self.new_register()
-            zero_inst = (mov_op_code, 0, node.right.register, zero_target)
+            zero_inst = (mov_op_code, 0, zero_target)
             self.code.append(zero_inst)
 
             target = self.new_register()

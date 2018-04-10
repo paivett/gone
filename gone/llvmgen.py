@@ -13,6 +13,7 @@ work before we implement further support for user-defined functions later.
 
 Further instructions are contained in the comments below.
 '''
+from functools import partialmethod
 
 # LLVM imports. Don't change this.
 
@@ -35,14 +36,14 @@ void_type   = VoidType()          # Void type.  This is a special type
                                   # used for internal functions returning
                                   # no value
 
-# The following class is going to generate the LLVM instruction stream.  
+# The following class is going to generate the LLVM instruction stream.
 # The basic features of this class are going to mirror the experiments
 # you tried in Exercise 5.  The execution model is somewhat similar
 # to the visitor class.
 #
 # Given a sequence of instruction tuples such as this:
 #
-#         code = [ 
+#         code = [
 #              ('MOVI', 1, 'R1'),
 #              ('MOVI', 2, 'R2')
 #              ('ADDI', 'R1', 'R2', 'R3')
@@ -59,7 +60,7 @@ void_type   = VoidType()          # Void type.  This is a special type
 #
 #    Internally, you'll need to track variables, constants and other
 #    objects being created.  Use a Python dictionary to emulate
-#    storage. 
+#    storage.
 
 class GenerateLLVM(object):
     def __init__(self):
@@ -101,7 +102,7 @@ class GenerateLLVM(object):
         # functions are implemented in C in a separate file gonert.c
 
         self.runtime = {}
-        
+
         # Declare printing functions
         self.runtime['_print_int'] = Function(self.module,
                                               FunctionType(void_type, [int_type]),
@@ -137,88 +138,74 @@ class GenerateLLVM(object):
     # ----------------------------------------------------------------------
 
     # Creation of literal values.  Simply define as LLVM constants.
-    def emit_MOVI(self, value, target):
-        self.temps[target] = Constant(int_type, value)
+    def emit_MOV(self, value, target, val_type):
+        self.temps[target] = Constant(val_type, value)
 
-    def emit_MOVF(self, value, target):
-        pass                # You must implement
-
-    def emit_MOVB(self, value, target):
-        pass                # You must implement
+    emit_MOVI = partialmethod(emit_MOV, val_type=int_type)
+    emit_MOVF = partialmethod(emit_MOV, val_type=float_type)
+    emit_MOVB = partialmethod(emit_MOV, val_type=byte_type)
 
     # Allocation of variables.  Declare as global variables and set to
     # a sensible initial value.
-    def emit_VARI(self, name):
-        var = GlobalVariable(self.module, int_type, name=name)
-        var.initializer = Constant(int_type, 0)
+    def emit_VAR(self, name, var_type):
+        var = GlobalVariable(self.module, var_type, name=name)
+        var.initializer = Constant(var_type, 0)
         self.vars[name] = var
 
-    def emit_VARF(self, name):
-        pass                # You must implement
-
-    def emit_VARB(self, name):
-        pass                # You must implement
+    emit_VARI = partialmethod(emit_VAR, var_type=int_type)
+    emit_VARF = partialmethod(emit_VAR, var_type=float_type)
+    emit_VARB = partialmethod(emit_VAR, var_type=byte_type)
 
     # Load/store instructions for variables.  Load needs to pull a
     # value from a global variable and store in a temporary. Store
     # goes in the opposite direction.
     def emit_LOADI(self, name, target):
-        self.temps[target] = self.builder.load(self.vars[name], target)
+        self.temps[target] = self.builder.load(self.vars[name], name=target)
 
-    def emit_LOADF(self, name, target):
-        pass                 # You must implement
-
-    def emit_LOADB(self, name, target):
-        pass                 # You must implement
+    emit_LOADF = emit_LOADI
+    emit_LOADB = emit_LOADI
 
     def emit_STOREI(self, source, target):
         self.builder.store(self.temps[source], self.vars[target])
 
-    def emit_STOREF(self, source, target):
-        pass                 # You must implement
-
-
-    def emit_STOREB(self, source, target):
-        pass                 # You must implement
-
+    emit_STOREF = emit_STOREI
+    emit_STOREB = emit_STOREI
 
     # Binary + operator
     def emit_ADDI(self, left, right, target):
-        self.temps[target] = self.builder.add(self.temps[left], self.temps[right], target)
+        self.temps[target] = self.builder.add(self.temps[left], self.temps[right], name=target)
 
     def emit_ADDF(self, left, right, target):
-        pass                 # You must implement
+        self.temps[target] = self.builder.fadd(self.temps[left], self.temps[right], name=target)
 
     # Binary - operator
     def emit_SUBI(self, left, right, target):
-        pass                 # You must implement
+        self.temps[target] = self.builder.sub(self.temps[left], self.temps[right], name=target)
 
     def emit_SUBF(self, left, right, target):
-        pass                 # You must implement
+        self.temps[target] = self.builder.fsub(self.temps[left], self.temps[right], name=target)
 
     # Binary * operator
     def emit_MULI(self, left, right, target):
-        pass                 # You must implement
+        self.temps[target] = self.builder.mul(self.temps[left], self.temps[right], name=target)
 
     def emit_MULF(self, left, right, target):
-        pass                 # You must implement
+        self.temps[target] = self.builder.fmul(self.temps[left], self.temps[right], name=target)
 
     # Binary / operator
     def emit_DIVI(self, left, right, target):
-        pass                 # You must implement
+        self.temps[target] = self.builder.sdiv(self.temps[left], self.temps[right], name=target)
 
     def emit_DIVF(self, left, right, target):
-        pass                 # You must implement
+        self.temps[target] = self.builder.fdiv(self.temps[left], self.temps[right], name=target)
 
     # Print statements
-    def emit_PRINTI(self, source):
-        self.builder.call(self.runtime['_print_int'], [self.temps[source]])
+    def emit_PRINT(self, source, runtime_name):
+        self.builder.call(self.runtime[runtime_name], [self.temps[source]])
 
-    def emit_PRINTF(self, source):
-        pass                 # You must implement
-
-    def emit_PRINTB(self, source):
-        pass                 # You must implement
+    emit_PRINTI = partialmethod(emit_PRINT, runtime_name="_print_int")
+    emit_PRINTF = partialmethod(emit_PRINT, runtime_name="_print_float")
+    emit_PRINTB = partialmethod(emit_PRINT, runtime_name="_print_byte")
 
 #######################################################################
 #                      TESTING/MAIN PROGRAM
@@ -227,7 +214,7 @@ class GenerateLLVM(object):
 def compile_llvm(source):
     from .ircode import compile_ircode
 
-    # Compile intermediate code 
+    # Compile intermediate code
     # !!! This needs to be changed in Project 7/8
     code = compile_ircode(source)
 
@@ -254,6 +241,6 @@ if __name__ == '__main__':
 
 
 
-        
-        
-        
+
+
+
