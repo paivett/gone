@@ -54,7 +54,7 @@ class FloatType(Type):
         return None
 
     @classmethod
-    def unaryop_supported(cls, op):
+    def unaryop_type(cls, op):
         if op in cls.unary_operators:
             return FloatType
 
@@ -73,7 +73,7 @@ class IntType(Type):
         return None
 
     @classmethod
-    def unaryop_supported(cls, op):
+    def unaryop_type(cls, op):
         if op in cls.unary_operators:
             return IntType
 

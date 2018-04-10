@@ -28,7 +28,7 @@ On a CPU, it might be decomposed into low-level instructions like this:
     STOREI R7, "a"
 
 Each instruction represents a single operation such as add, multiply, etc.
-There are always two input operands and a destination.  
+There are always two input operands and a destination.
 
 CPUs also feature a small set of core datatypes such as integers,
 bytes, and floats. There are dedicated instructions for each type.
@@ -48,7 +48,7 @@ about it in the compiler).
 Here is an instruction set specification for our IRCode:
 
     MOVI   value, target       ;  Load a literal integer
-    VARI   name                ;  Declare an integer variable 
+    VARI   name                ;  Declare an integer variable
     ALLOCI name                ;  Allocate an integer variabe on the stack
     LOADI  name, target        ;  Load an integer from a variable
     STOREI target, name        ;  Store an integer into a variable
@@ -64,7 +64,7 @@ Here is an instruction set specification for our IRCode:
     ITOF   r1, target          ;  target = float(r1)
 
     MOVF   value, target       ;  Load a literal float
-    VARF   name                ;  Declare a float variable 
+    VARF   name                ;  Declare a float variable
     ALLOCF name                ;  Allocate a float variable on the stack
     LOADF  name, target        ;  Load a float from a variable
     STOREF target, name        ;  Store a float into a variable
@@ -109,7 +109,7 @@ Your Task
 =========
 Your task is as follows: Write a AST Visitor() class that takes a
 program and flattens it to a single sequence of SSA code instructions
-represented as tuples of the form 
+represented as tuples of the form
 
        (operation, operands, ..., destination)
 
@@ -120,6 +120,40 @@ sample output. Work through each file to complete the project.
 '''
 
 from . import ast
+
+
+OP_CODES = {
+    'int': {
+        'mov': 'MOVI',
+        '+': 'ADDI',
+        '-': 'SUBI',
+        '*': 'MULI',
+        '/': 'DIVI',
+        'print': 'PRINTI',
+        'store': 'STOREI',
+        'var': 'VARI',
+        'load': 'LOADI'
+    },
+    'float': {
+        'mov': 'MOVF',
+        '+': 'ADDF',
+        '-': 'SUBF',
+        '*': 'MULF',
+        '/': 'DIVF',
+        'print': 'PRINTF',
+        'store': 'STOREF',
+        'var': 'VARF',
+        'load': 'LOADF'
+    },
+    'char': {
+        'mov': 'MOVB',
+        'print': 'PRINTB',
+        'store': 'STOREB',
+        'var': 'VARB',
+        'load': 'LOADB'
+    }
+}
+
 
 class GenerateCode(ast.NodeVisitor):
     '''
@@ -148,58 +182,107 @@ class GenerateCode(ast.NodeVisitor):
 
     def visit_IntegerLiteral(self, node):
         target = self.new_register()
-        self.code.append(('MOVI', node.value, target))
-
+        op_code = OP_CODES['int']['mov']
+        self.code.append((op_code, node.value, target))
         # Save the name of the register where the value was placed
         node.register = target
 
     def visit_FloatLiteral(self, node):
         target = self.new_register()
-        self.code.append(('MOVF', node.value, target))
+        op_code = OP_CODES['float']['mov']
+        self.code.append((op_code, node.value, target))
+        node.register = target
+
+    def visit_CharLiteral(self, node):
+        target = self.new_register()
+        op_code = OP_CODES['char']['mov']
+        # We treat chars as their ascii value
+        self.code.append((op_code, ord(node.value), target))
+        # This is just to remember where the literal was put in
         node.register = target
 
     def visit_BinOp(self, node):
         self.visit(node.left)
         self.visit(node.right)
-        op = node.op
-        if node.type.name == 'int':
-            if op == '+':
-                code = 'ADDI'
-            elif op == '-':
-                code = 'SUBI'
-            elif op == '*':
-                code = 'MULI'
-            elif op == '/':
-                code = 'DIVI'
-            else:
-                raise RuntimeError(f'Unknown binop {op}')
-        elif node.type.name == 'float':
-            if op == '+':
-                code = 'ADDF'
-            elif op == '-':
-                code = 'SUBF'
-            elif op == '*':
-                code = 'MULF'
-            elif op == '/':
-                code = 'DIVF'
-            else:
-                raise RuntimeError(f'Unknown binop {op}')
+        operator = node.op
+
+        op_code = OP_CODES[node.type.name][operator]
 
         target = self.new_register()
-        inst = (code, node.left.register, node.right.register, target)
+        inst = (op_code, node.left.register, node.right.register, target)
         self.code.append(inst)
         node.register = target
+
+    def visit_UnaryOp(self, node):
+        self.visit(node.right)
+        operator = node.op
+
+        if operator == "-":
+            sub_op_code = OP_CODES[node.type.name][operator]
+            mov_op_code = OP_CODES[node.type.name]['mov']
+
+            # To account for the fact that the machine code does not support
+            # unary operations, we must load a 0 into a new register first
+            zero_target = self.new_register()
+            zero_inst = (mov_op_code, 0, node.right.register, zero_target)
+            self.code.append(zero_inst)
+
+            target = self.new_register()
+            inst = (sub_op_code, zero_target, node.right.register, target)
+            self.code.append(inst)
+            node.register = target
+        else:
+            # The plus unary operator produces no extra code
+            node.register = node.right.register
 
     # CHALLENGE:  Figure out some more sane way to refactor the above code
 
     def visit_PrintStatement(self, node):
         self.visit(node.value)
-        if node.value.type.name == 'int':
-            code = 'PRINTI'
-        elif node.value.type.name == 'float':
-            code = 'PRINTF'
-        inst = (code, node.value.register)
+        op_code = OP_CODES[node.value.type.name]['print']
+        inst = (op_code, node.value.register)
         self.code.append(inst)
+
+    def visit_ReadLocation(self, node):
+        op_code = OP_CODES[node.location.type.name]['load']
+        register = self.new_register()
+        inst = (op_code, node.location.name, register)
+        self.code.append(inst)
+        node.register = register
+
+    def visit_WriteLocation(self, node):
+        self.visit(node.value)
+        op_code = OP_CODES[node.location.type.name]['store']
+        inst = (op_code, node.value.register, node.location.name)
+        self.code.append(inst)
+        # node.register = register
+
+    def visit_ConstDeclaration(self, node):
+        self.visit(node.value)
+
+        # First we must declare the variable
+        op_code = OP_CODES[node.type.name]['var']
+        inst = (op_code, node.name)
+        self.code.append(inst)
+
+        op_code = OP_CODES[node.type.name]['store']
+        inst = (op_code, node.value.register, node.name)
+        self.code.append(inst)
+
+    def visit_VarDeclaration(self, node):
+        self.visit(node.datatype)
+
+        op_code = OP_CODES[node.type.name]['var']
+        def_inst = (op_code, node.name)
+
+        if node.value:
+            self.visit(node.value)
+            self.code.append(def_inst)
+            op_code = OP_CODES[node.type.name]['store']
+            inst = (op_code, node.value.register, node.name)
+            self.code.append(inst)
+        else:
+            self.code.append(def_inst)
 
 # ----------------------------------------------------------------------
 #                          TESTING/MAIN PROGRAM
@@ -222,7 +305,7 @@ def compile_ircode(source):
     if not errors_reported():
         gen = GenerateCode()
         gen.visit(ast)
-        return gen.code    
+        return gen.code
     else:
         return []
 
