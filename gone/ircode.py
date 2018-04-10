@@ -119,40 +119,66 @@ The files Tests/irtest0-5.g contain some input text along with
 sample output. Work through each file to complete the project.
 '''
 
+from collections import ChainMap
 from . import ast
 
-OP_CODE_TYPE_SUFFIX = {
+IR_TYPE_MAPPING = {
     'int': 'I',
     'float': 'F',
     'char': 'B',
     'bool': 'I'
 }
 
-OP_CODES = {
-    'mov': 'MOV',
-    '+': 'ADD',
-    '-': 'SUB',
-    '*': 'MUL',
-    '/': 'DIV',
-    '&&': 'AND',
-    '||': 'OR',
-    'print': 'PRINT',
-    'store': 'STORE',
-    'var': 'VAR',
-    'load': 'LOAD',
-    'label': 'LABEL',
-    'cbranch': 'CBRANCH', # Conditional branch
-    'branch': 'BRANCH' # Unconditional branch
-}
-OP_CODES.update(
+OP_CODES = ChainMap(
+    {
+        'mov': 'MOV',
+        '+': 'ADD',
+        '-': 'SUB',
+        '*': 'MUL',
+        '/': 'DIV',
+        '&&': 'AND',
+        '||': 'OR',
+        'print': 'PRINT',
+        'store': 'STORE',
+        'var': 'VAR',
+        'alloc': 'ALLOC', # Local allocation (inside functions)
+        'load': 'LOAD',
+        'label': 'LABEL',
+        'cbranch': 'CBRANCH', # Conditional branch
+        'branch': 'BRANCH', # Unconditional branch,
+        'call': 'CALL',
+        'ret': 'RET'
+    },
     dict.fromkeys(['<', '>', '<=', '>=', '==', '!='], "CMP")
 )
 
 def get_op_code(operation, type_name=None):
     op_code = OP_CODES[operation]
-    suffix = "" if not type_name else OP_CODE_TYPE_SUFFIX[type_name]
+    suffix = "" if not type_name else IR_TYPE_MAPPING[type_name]
 
     return f"{op_code}{suffix}"
+
+
+class Function():
+    """This represents a function with its list of IR instructions"""
+
+    def __init__(self, func_name, parameters, return_type):
+        self.name = func_name
+        self.parameters = parameters
+        self.return_type = return_type
+
+        self.code = []
+
+    def append(self, ir_instruction):
+        self.code.append(ir_instruction)
+
+    def __iter__(self):
+        return self.code.__iter__()
+
+    def __repr__(self):
+        params = [f"{pname}:{ptype}" for pname, ptype in self.parameters]
+        return f"{self.name}({params}) -> {self.return_type}"
+
 
 class GenerateCode(ast.NodeVisitor):
     '''
@@ -165,8 +191,17 @@ class GenerateCode(ast.NodeVisitor):
         # counter for block labels
         self.label_count = 0
 
+        # Special function to collect all global statements
+        init_function = Function("__gone_init", [], IR_TYPE_MAPPING['int'])
+
+        self.functions = [ init_function ]
+
         # The generated code (list of tuples)
-        self.code = []
+        self.code = init_function.code
+
+        # This flag indicates if the current code being visited is in global
+        # scope, or not
+        self.global_scope = True
 
     def new_register(self):
          '''
@@ -294,7 +329,6 @@ class GenerateCode(ast.NodeVisitor):
         inst = (op_code, node.name)
         self.code.append(inst)
 
-        # op_code = OP_CODES[node.type.name]['store']
         op_code = get_op_code('store', node.type.name)
         inst = (op_code, node.value.register, node.name)
         self.code.append(inst)
@@ -302,7 +336,8 @@ class GenerateCode(ast.NodeVisitor):
     def visit_VarDeclaration(self, node):
         self.visit(node.datatype)
 
-        op_code = get_op_code('var', node.type.name)
+        # The variable declaration depends on the scope
+        op_code = get_op_code('var' if self.global_scope else 'alloc', node.type.name)
         def_inst = (op_code, node.name)
 
         if node.value:
@@ -370,6 +405,43 @@ class GenerateCode(ast.NodeVisitor):
         # Now we insert the merge label
         self.code.append((lbl_op_code, merge_label))
 
+    def visit_FuncDeclaration(self, node):
+        # Generate a new function object to collect the code
+        func = Function(node.name,
+                        [(p.name, IR_TYPE_MAPPING[p.datatype.type.name])
+                         for p in node.params],
+                        IR_TYPE_MAPPING[node.datatype.type.name])
+        self.functions.append(func)
+
+        if func.name == "main":
+            func.name = "__gone_main"
+
+        # And switch the current function to the new one
+        old_code = self.code
+        self.code = func.code
+
+        # Now, generate the new function code
+        self.global_scope = False # Turn off global scope
+        self.visit(node.body)
+        self.global_scope = True # Turn back on global scope
+
+        # And, finally, switch back to the original function we were at
+        self.code = old_code
+
+    def visit_FuncCall(self, node):
+        self.visit(node.arguments)
+        target = self.new_register()
+        op_code = get_op_code('call')
+        registers = [arg.register for arg in node.arguments]
+        self.code.append((op_code, node.name, *registers, target))
+        node.register = target
+
+    def visit_ReturnStatement(self, node):
+        self.visit(node.value)
+        op_code = get_op_code('ret')
+        self.code.append((op_code, node.value.register))
+        node.register = node.value.register
+
 # ----------------------------------------------------------------------
 #                          TESTING/MAIN PROGRAM
 #
@@ -391,7 +463,7 @@ def compile_ircode(source):
     if not errors_reported():
         gen = GenerateCode()
         gen.visit(ast)
-        return gen.code
+        return gen.functions
     else:
         return []
 
@@ -405,8 +477,11 @@ def main():
     source = open(sys.argv[1]).read()
     code = compile_ircode(source)
 
-    for instr in code:
-        print(instr)
+    for f in code :
+        print(f'{"::"*5} {f} {"::"*5}')
+        for instruction in f.code:
+            print(instruction)
+        print("*"*30)
 
 if __name__ == '__main__':
     main()

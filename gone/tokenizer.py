@@ -114,7 +114,7 @@ class GoneLexer(Lexer):
         'INTEGER', 'FLOAT', 'CHAR', 'BOOL',
 
         # Operators
-        'PLUS', 'MINUS', 'TIMES', 'DIVIDE', 'ASSIGN', 'SEMI',
+        'PLUS', 'MINUS', 'TIMES', 'DIVIDE', 'ASSIGN', 'SEMI', 'COMA',
 
         # Bool operators
         'LE', 'LT', 'GE', 'GT', 'EQ', 'NE', 'AND', 'OR', 'NOT',
@@ -185,6 +185,7 @@ class GoneLexer(Lexer):
     DIVIDE = r'/'
     ASSIGN = r'='
     SEMI = r';'
+    COMA = r','
     LPAREN = r'\('
     RPAREN = r'\)'
 

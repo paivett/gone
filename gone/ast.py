@@ -136,12 +136,29 @@ class UnaryOp(Expression):
     op    : str
     right : Expression
 
+class FuncCall(Expression):
+    name      : str
+    arguments : [Expression]
+
 class ConstDeclaration(Statement):
     '''
     const name = value ;
     '''
     name  : str
     value : Expression
+
+class FuncParameter(AST):
+    name: str
+    datatype: DataType
+
+class FuncDeclaration(Statement):
+    name  : str
+    params : [FuncParameter]
+    datatype: DataType
+    body : [Statement]
+
+class ReturnStatement(Statement):
+    value: Expression
 
 class SimpleType(DataType):
     name : str

@@ -13,13 +13,14 @@ work before we implement further support for user-defined functions later.
 
 Further instructions are contained in the comments below.
 '''
+from collections import ChainMap
 from functools import partialmethod
 
 # LLVM imports. Don't change this.
 
 from llvmlite.ir import (
-    Module, IRBuilder, Function, IntType, DoubleType, VoidType, Constant, GlobalVariable,
-    FunctionType
+    Module, IRBuilder, Function, IntType, DoubleType, VoidType, Constant,
+    GlobalVariable, FunctionType
     )
 
 # Declare the LLVM type objects that you want to use for the low-level
@@ -35,6 +36,13 @@ byte_type   = IntType(8)          # 8-bit integer
 void_type   = VoidType()          # Void type.  This is a special type
                                   # used for internal functions returning
                                   # no value
+
+LLVM_TYPE_MAPPING = {
+    'I': int_type,
+    'F': float_type,
+    'B': byte_type,
+    None: void_type
+}
 
 # The following class is going to generate the LLVM instruction stream.
 # The basic features of this class are going to mirror the experiments
@@ -75,22 +83,11 @@ class GenerateLLVM(object):
         # level function void main() { ... }.   This will get changed later.
 
         self.module = Module('module')
-        self.function = Function(self.module,
-                                 FunctionType(void_type, []),
-                                 name='main')
 
-        self.block = self.function.append_basic_block('entry')
-        self.builder = IRBuilder(self.block)
+        # All globals variables and function definitions go here
+        self.globals = { }
 
-        # Dictionary that holds all of the global variable/function declarations.
-        # Any declaration in the Gone source code is going to get an entry here
-        self.vars = {}
-
-        # Dictionary that holds all of the temporary registers created in
-        # the intermediate code.
-        self.temps = {}
-
-        self.blocks = {}
+        self.blocks = { }
 
         # Initialize the runtime library functions (see below)
         self.declare_runtime_library()
@@ -118,21 +115,57 @@ class GenerateLLVM(object):
                                                 FunctionType(void_type, [byte_type]),
                                                 name="_print_byte")
 
-    def generate_code(self, ircode):
+    def generate_code(self, ir_function):
         # Given a sequence of SSA intermediate code tuples, generate LLVM
         # instructions using the current builder (self.builder).  Each
         # opcode tuple (opcode, args) is dispatched to a method of the
         # form self.emit_opcode(args)
+        # print(ir_function)
+        self.function = Function(self.module,
+                                 FunctionType(
+                                     LLVM_TYPE_MAPPING[ir_function.return_type],
+                                     [LLVM_TYPE_MAPPING[ptype] for _, ptype in ir_function.parameters]
+                                 ),
+                                 name=ir_function.name)
 
-        for opcode, *args in ircode:
+        self.block = self.function.append_basic_block('entry')
+        self.builder = IRBuilder(self.block)
+
+        # Save the function as a global to be referenced later on another
+        # function
+        self.globals[ir_function.name] = self.function
+
+        # All local variables are stored here
+        self.locals = { }
+
+        self.vars = ChainMap(self.locals, self.globals)
+
+        # Dictionary that holds all of the temporary registers created in
+        # the intermediate code.
+        self.temps = { }
+
+        # Setup the function parameters
+        for n, (pname, ptype) in enumerate(ir_function.parameters):
+            self.vars[pname] = self.builder.alloca(LLVM_TYPE_MAPPING[ptype], name=pname)
+            self.builder.store(self.function.args[n], self.vars[pname])
+
+        # Allocate the return value and return_block
+        if ir_function.return_type:
+            self.vars['return'] = self.builder.alloca(
+                LLVM_TYPE_MAPPING[ir_function.return_type], name='return')
+        self.return_block = self.function.append_basic_block('return')
+
+        for opcode, *args in ir_function.code:
             if hasattr(self, 'emit_'+opcode):
                 getattr(self, 'emit_'+opcode)(*args)
             else:
                 print('Warning: No emit_'+opcode+'() method')
 
-        # Add a return statement.  Note, at this point, we don't really have
-        # user-defined functions so this is a bit of hack--it may be removed later.
-        self.builder.ret_void()
+        if not self.block.is_terminated:
+            self.builder.branch(self.return_block)
+
+        self.builder.position_at_end(self.return_block)
+        self.builder.ret(self.builder.load(self.vars['return'], 'return'))
 
     def get_block(self, block_name):
         block = self.blocks.get(block_name)
@@ -155,16 +188,25 @@ class GenerateLLVM(object):
     emit_MOVF = partialmethod(emit_MOV, val_type=float_type)
     emit_MOVB = partialmethod(emit_MOV, val_type=byte_type)
 
-    # Allocation of variables.  Declare as global variables and set to
+    # Allocation of GLOBAL variables.  Declare as global variables and set to
     # a sensible initial value.
     def emit_VAR(self, name, var_type):
         var = GlobalVariable(self.module, var_type, name=name)
         var.initializer = Constant(var_type, 0)
-        self.vars[name] = var
+        self.globals[name] = var
 
     emit_VARI = partialmethod(emit_VAR, var_type=int_type)
     emit_VARF = partialmethod(emit_VAR, var_type=float_type)
     emit_VARB = partialmethod(emit_VAR, var_type=byte_type)
+
+    # Allocation of LOCAL variables.  Declare as local variables and set to
+    # a sensible initial value.
+    def emit_ALLOC(self, name, var_type):
+        self.locals[name] = self.builder.alloca(var_type, name=name)
+
+    emit_ALLOCI = partialmethod(emit_ALLOC, var_type=int_type)
+    emit_ALLOCF = partialmethod(emit_ALLOC, var_type=float_type)
+    emit_ALLOCB = partialmethod(emit_ALLOC, var_type=byte_type)
 
     # Load/store instructions for variables.  Load needs to pull a
     # value from a global variable and store in a temporary. Store
@@ -241,17 +283,29 @@ class GenerateLLVM(object):
         self.temps[target] = self.builder.xor(self.temps[left], self.temps[right], target)
 
     def emit_LABEL(self, lbl_name):
-        block = self.get_block(lbl_name)
-        self.builder.position_at_end(block)
+        self.block = self.get_block(lbl_name)
+        self.builder.position_at_end(self.block)
 
     def emit_BRANCH(self, dst_label):
-        self.builder.branch(self.get_block(dst_label))
+        if not self.block.is_terminated:
+            self.builder.branch(self.get_block(dst_label))
 
     def emit_CBRANCH(self, test_target, true_label, false_label):
         true_block = self.get_block(true_label)
         false_block = self.get_block(false_label)
         testvar = self.temps[test_target]
         self.builder.cbranch(self.builder.trunc(testvar, IntType(1)), true_block, false_block)
+
+    def emit_RET(self, register):
+        self.builder.store(self.temps[register], self.vars['return'])
+        self.builder.branch(self.return_block)
+
+    def emit_CALL(self, func_name, *registers):
+        # print(self.globals)
+        args = [self.temps[r] for r in registers[:-1]]
+        target = registers[-1]
+        self.temps[target] = self.builder.call(self.globals[func_name], args)
+
 
 #######################################################################
 #                      TESTING/MAIN PROGRAM
@@ -260,15 +314,17 @@ class GenerateLLVM(object):
 def compile_llvm(source):
     from .ircode import compile_ircode
 
-    # Compile intermediate code
-    # !!! This needs to be changed in Project 7/8
-    code = compile_ircode(source)
-
     # Make the low-level code generator
     generator = GenerateLLVM()
 
+    # Compile intermediate code
+    ir_functions = compile_ircode(source)
+    for ir_func in ir_functions:
+        # Generates LLVM low level code for a given IR-code Function
+        generator.generate_code(ir_func)
+
     # Generate low-level code
-    generator.generate_code(code)
+    # generator.generate_code(code)
     return str(generator.module)
 
 def main():

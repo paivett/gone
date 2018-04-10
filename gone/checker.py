@@ -105,6 +105,7 @@ It's not always clear how to best organize all of that.  So, expect to
 fumble around a bit at first.
 '''
 
+from collections import ChainMap
 from .errors import error
 from .ast import *
 from .typesys import Type, FloatType, IntType, CharType, BoolType
@@ -119,6 +120,19 @@ class CheckProgramVisitor(NodeVisitor):
     def __init__(self):
         # Initialize the symbol table
         self.symbols = { }
+
+        # Temporal symbols table to save the global symbols when checking
+        # a function definition
+        self.temp_symbols = { }
+
+        # Here we save the expected return type when checking a function
+        self.expected_ret_type = None
+
+        # And here we save the observed return type when checking a function
+        self.current_ret_type = None
+
+        # A table of function definitions
+        self.functions = { }
 
         # Put the builtin type names in the symbol table
         # self.symbols.update(builtin_types)
@@ -286,6 +300,83 @@ class CheckProgramVisitor(NodeVisitor):
     def visit_SimpleType(self, node):
         # Associate a type name such as "int" with a Type object
         node.type = Type.get_by_name(node.name)
+        if node.type is None:
+            error(node.lineno, f"Invalid type '{node.name}'")
+
+    def visit_FuncParameter(self, node):
+        self.visit(node.datatype)
+        node.type = node.datatype.type
+
+    def visit_ReturnStatement(self, node):
+        self.visit(node.value)
+        # Propagate return value type as a special property ret_type, only
+        # to be checked at function declaration checking
+        if self.expected_ret_type:
+            self.current_ret_type = node.value.type
+            if node.value.type and node.value.type != self.expected_ret_type:
+                error(node.lineno, f"Function returns '{self.expected_ret_type.name}' but return statement value is of type '{node.value.type.name}'")
+        else:
+            error(node.lineno, "Return statement must be within a function")
+
+    def visit_FuncDeclaration(self, node):
+        if node.name in self.functions:
+            prev_def = self.functions[node.name].lineno
+            error(node.lineno, f"Function '{node.name}' already defined at line {prev_def}")
+
+        self.visit(node.params)
+
+        param_types_ok = all((param.type is not None for param in node.params))
+        param_names = [param.name for param in node.params]
+        param_names_ok = len(param_names) == len(set(param_names))
+        if not param_names_ok:
+            error(node.lineno, "Duplicate parameter names at function definition")
+
+        self.visit(node.datatype)
+        ret_type_ok = node.datatype.type is not None
+
+        # Before visiting the function, body, we must change the symbol table
+        # to a new one
+        if self.temp_symbols:
+            error(node.lineno, f"Illegal nested function declaration '{node.name}'")
+        else:
+            self.temp_symbols = self.symbols
+            self.symbols = ChainMap(
+                {param.name: param for param in node.params},
+                self.temp_symbols
+            )
+            # Set the expected return value to observe
+            self.expected_ret_type = node.datatype.type
+
+            self.visit(node.body)
+
+            if not self.current_ret_type:
+                error(node.lineno, f"Function '{node.name}' has no return statement")
+            elif self.current_ret_type == self.expected_ret_type:
+                # We must add the function declaration as available for
+                # future calls
+                self.functions[node.name] = node
+
+            self.symbols = self.temp_symbols
+            self.temp_symbols = { }
+            self.expected_ret_type = None
+            self.current_ret_type = None
+
+    def visit_FuncCall(self, node):
+        if node.name not in self.functions:
+            error(node.lineno, f"Function '{node.name}' is not declared")
+        else:
+            # We must check that the argument list matches the function
+            # parameters definition
+            self.visit(node.arguments)
+
+            arg_types = tuple([arg.type.name for arg in node.arguments])
+            func = self.functions[node.name]
+            expected_types = tuple([param.type.name for param in func.params])
+            if arg_types != expected_types:
+                error(node.lineno, f"Function '{node.name}' expects {expected_types}, but was called with {arg_types}")
+
+            # The type of the function call is the return type of the function
+            node.type = func.datatype.type
 
 # ----------------------------------------------------------------------
 #                       DO NOT MODIFY ANYTHING BELOW

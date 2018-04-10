@@ -7,7 +7,7 @@ formal BNF of the language follows.  Your task is to write parsing
 rules and build the AST for this grammar using SLY.  The following
 grammar is partial.  More features get added in later projects.
 
-program : blocks
+program : block
         | empty
 
 block : statements
@@ -22,6 +22,18 @@ statement :  const_declaration
           |  print_statement
           |  if_statement
           |  while_statement
+          |  func_declaration
+          |  ret_statement
+
+func_declaration : FUNC ID LPAREN func_params RPAREN datatype LBRACE block RBRACE
+
+func_params : func_param COMA func_params
+            | func_param
+            | empty
+
+func_param : ID datatype
+
+ret_statement : RETURN expression SEMI
 
 const_declaration : CONST ID = expression ;
 
@@ -50,6 +62,16 @@ expression :  + expression
            | ( expression )
            | location
            | literal
+           | func_call
+
+func_call : ID LPAREN arguments RPAREN SEMI
+
+arguments : arguments COMA argument
+          | argument
+          | empty
+
+argument : expression
+         | ID
 
 literal : INTEGER
         | FLOAT
@@ -185,6 +207,64 @@ class GoneParser(Parser):
     def statement(self, p):
         return p.while_statement
 
+    @_('func_declaration')
+    def statement(self, p):
+        return p.func_declaration
+
+    @_('ret_statement')
+    def statement(self, p):
+        return p.ret_statement
+
+    ##########################################
+
+    @_('FUNC ID LPAREN func_params RPAREN datatype LBRACE block RBRACE')
+    def func_declaration(self, p):
+        return FuncDeclaration(p.ID, p.func_params, p.datatype, p.block, lineno=p.lineno)
+
+    @_('func_params COMA func_param')
+    def func_params(self, p):
+        p.func_params.append(p.func_param)
+        return p.func_params
+
+    @_('func_param')
+    def func_params(self, p):
+        return [p.func_param]
+
+    @_('')
+    def func_params(self, p):
+        return []
+
+    @_('ID datatype')
+    def func_param(self, p):
+        return FuncParameter(p.ID, p.datatype, lineno=p.lineno)
+
+    @_("RETURN expression SEMI")
+    def ret_statement(self, p):
+        return ReturnStatement(p.expression, lineno=p.lineno)
+
+    ##########################################
+
+    @_('ID LPAREN arguments RPAREN')
+    def func_call(self, p):
+        return FuncCall(p.ID, p.arguments, lineno=p.lineno)
+
+    @_('arguments COMA argument')
+    def arguments(self, p):
+        p.arguments.append(p.argument)
+        return p.arguments
+
+    @_('argument')
+    def arguments(self, p):
+        return [p.argument]
+
+    @_('')
+    def arguments(self, p):
+        return []
+
+    @_('expression')
+    def argument(self, p):
+        return p.expression
+
     ##########################################
 
     @_('IF expression LBRACE block RBRACE ELSE LBRACE block RBRACE')
@@ -263,6 +343,10 @@ class GoneParser(Parser):
     @_('literal')
     def expression(self, p):
         return p.literal
+
+    @_('func_call')
+    def expression(self, p):
+        return p.func_call
 
     ##########################################
 

@@ -1,6 +1,6 @@
 /* gonert.c
 
-   This file contains runtime support functions for the Gone language 
+   This file contains runtime support functions for the Gone language
    as well as boot-strapping code related to getting the main program
    to run.
 */
@@ -27,11 +27,11 @@ void _print_byte(char c) {
 /* Bootstrapping code for a stand-alone executable */
 
 #ifdef NEED_MAIN
-extern void __init(void);
-extern int _gone_main(void);
+extern void __gone_init(void);
+extern int __gone_main(void);
 
 int main() {
-  __init();
-  return _gone_main();
+  __gone_init();
+  return __gone_main();
 }
 #endif
