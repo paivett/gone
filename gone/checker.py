@@ -107,7 +107,7 @@ fumble around a bit at first.
 
 from .errors import error
 from .ast import *
-from .typesys import Type, FloatType, IntType, CharType
+from .typesys import Type, FloatType, IntType, CharType, BoolType
 
 class CheckProgramVisitor(NodeVisitor):
     '''
@@ -187,6 +187,9 @@ class CheckProgramVisitor(NodeVisitor):
 
     def visit_CharLiteral(self, node):
         node.type = CharType
+
+    def visit_BoolLiteral(self, node):
+        node.type = BoolType
 
     def visit_PrintStatement(self, node):
         self.visit(node.value)

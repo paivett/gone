@@ -109,6 +109,9 @@ class FloatLiteral(Literal):
 class CharLiteral(Literal):
     value : str
 
+class BoolLiteral(Literal):
+    value : str
+
 class BinOp(Expression):
     '''
     A Binary operator such as 2 + 3 or x * y

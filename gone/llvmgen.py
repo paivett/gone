@@ -207,6 +207,29 @@ class GenerateLLVM(object):
     emit_PRINTF = partialmethod(emit_PRINT, runtime_name="_print_float")
     emit_PRINTB = partialmethod(emit_PRINT, runtime_name="_print_byte")
 
+    def emit_CMPI(self, operator, left, right, target):
+        tmp = self.builder.icmp_signed(operator, self.temps[left], self.temps[right], 'tmp')
+        # LLVM compares produce a 1-bit integer as a result.  Since our IRcode using integers
+        # for bools, need to sign-extend the result up to the normal int_type to continue
+        # with further processing (otherwise you'll get a LLVM type error).
+        self.temps[target] = self.builder.zext(tmp, int_type, target)
+
+    def emit_CMPF(self, operator, left, right, target):
+        tmp = self.builder.fcmp_ordered(operator, self.temps[left], self.temps[right], 'tmp')
+        self.temps[target] = self.builder.zext(tmp, int_type, target)
+
+    emit_CMPB = emit_CMPI
+
+    # Logical ops
+    def emit_AND(self, left, right, target):
+        self.temps[target] = self.builder.and_(self.temps[left], self.temps[right], target)
+
+    def emit_OR(self, left, right, target):
+        self.temps[target] = self.builder.or_(self.temps[left], self.temps[right], target)
+
+    def emit_XOR(self, left, right, target):
+        self.temps[target] = self.builder.xor(self.temps[left], self.temps[right], target)
+
 #######################################################################
 #                      TESTING/MAIN PROGRAM
 #######################################################################

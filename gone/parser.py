@@ -29,10 +29,19 @@ print_statement : PRINT expression ;
 
 expression :  + expression
            |  - expression
+           |  ! expression
            | expression + expression
            | expression - expression
            | expression * expression
            | expression / expression
+           | expression < expression
+           | expression <= expression
+           | expression > expression
+           | expression >= expression
+           | expression == expression
+           | expression != expression
+           | expression && expression
+           | expression || expression
            | ( expression )
            | location
            | literal
@@ -40,6 +49,7 @@ expression :  + expression
 literal : INTEGER
         | FLOAT
         | CHAR
+        | BOOL
 
 location : ID
          ;
@@ -85,8 +95,11 @@ class GoneParser(Parser):
     # precedence rules as in Python.  Instructions to be given in the project.
 
     precedence = (
+        ('left', 'AND', 'NOT'),
+        ('nonassoc', 'LT', 'LE', 'GT', 'GE', 'EQ', 'NE'),
         ('left', 'PLUS', 'MINUS'),
         ('left', 'TIMES', 'DIVIDE'),
+        ('right', 'UNARY')
     )
 
     # ----------------------------------------------------------------------
@@ -182,12 +195,21 @@ class GoneParser(Parser):
     @_('expression PLUS expression',
        'expression MINUS expression',
        'expression TIMES expression',
-       'expression DIVIDE expression')
+       'expression DIVIDE expression',
+       'expression LT expression',
+       'expression LE expression',
+       'expression GT expression',
+       'expression GE expression',
+       'expression EQ expression',
+       'expression NE expression',
+       'expression AND expression',
+       'expression OR expression')
     def expression(self, p):
         return BinOp(p[1], p.expression0, p.expression1, lineno=p.lineno)
 
     @_('PLUS expression',
-       'MINUS expression',)
+       'MINUS expression',
+       'NOT expression %prec UNARY')
     def expression(self, p):
         return UnaryOp(p[0], p.expression, lineno=p.lineno)
 
@@ -216,6 +238,10 @@ class GoneParser(Parser):
     @_('CHAR')
     def literal(self, p):
         return CharLiteral(eval(p.CHAR), lineno=p.lineno)
+
+    @_('BOOL')
+    def literal(self, p):
+        return BoolLiteral(p.BOOL, lineno=p.lineno)
 
     #########################################
 

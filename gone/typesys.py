@@ -18,6 +18,14 @@ KEEP IT SIMPLE. REPEAT. SIMPLE.
 
 '''
 
+ARITHM_BIN_OPS = ["+", "-", "*", "/"]
+ARITHM_UNARY_OPS = ["+", "-"]
+
+REL_BIN_OPS = ["<", "<=", ">", ">=", "==", "!="]
+
+BOOL_BIN_OPS = ["&&", "||", "==", "!="]
+BOOL_UNARY_OPS = ["!"]
+
 class Type():
     """Base class for our type system"""
 
@@ -43,41 +51,69 @@ class Type():
 
 class FloatType(Type):
     name = "float"
-    binary_operators = ["+", "-", "*", "/"]
-    unary_operators = ["+", "-"]
 
     @classmethod
     def binop_type(cls, op, right_type):
-        if op in cls.binary_operators and issubclass(right_type, FloatType):
-            return FloatType
+        if issubclass(right_type, FloatType):
+            if op in ARITHM_BIN_OPS:
+                return FloatType
+            elif op in REL_BIN_OPS:
+                return BoolType
 
         return None
 
     @classmethod
     def unaryop_type(cls, op):
-        if op in cls.unary_operators:
+        if op in ARITHM_UNARY_OPS:
             return FloatType
 
         return None
 
 class IntType(Type):
     name = "int"
-    binary_operators = ["+", "-", "*", "/"]
-    unary_operators = ["+", "-"]
 
     @classmethod
     def binop_type(cls, op, right_type):
-        if op in cls.binary_operators and issubclass(right_type, IntType):
-            return IntType
+        if issubclass(right_type, IntType):
+            if op in ARITHM_BIN_OPS:
+                return IntType
+            elif op in REL_BIN_OPS:
+                return BoolType
 
         return None
 
     @classmethod
     def unaryop_type(cls, op):
-        if op in cls.unary_operators:
+        if op in ARITHM_UNARY_OPS:
             return IntType
 
         return None
 
 class CharType(Type):
     name = "char"
+
+    @classmethod
+    def binop_type(cls, op, right_type):
+        if issubclass(right_type, CharType):
+            if op in REL_BIN_OPS:
+                return BoolType
+
+        return None
+
+
+class BoolType(Type):
+    name = "bool"
+
+    @classmethod
+    def binop_type(cls, op, right_type):
+        if issubclass(right_type, BoolType) and op in BOOL_BIN_OPS:
+                return BoolType
+
+        return None
+
+    @classmethod
+    def unaryop_type(cls, op):
+        if op in BOOL_UNARY_OPS:
+            return BoolType
+
+        return None

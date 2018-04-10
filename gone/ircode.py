@@ -121,39 +121,35 @@ sample output. Work through each file to complete the project.
 
 from . import ast
 
-
-OP_CODES = {
-    'int': {
-        'mov': 'MOVI',
-        '+': 'ADDI',
-        '-': 'SUBI',
-        '*': 'MULI',
-        '/': 'DIVI',
-        'print': 'PRINTI',
-        'store': 'STOREI',
-        'var': 'VARI',
-        'load': 'LOADI'
-    },
-    'float': {
-        'mov': 'MOVF',
-        '+': 'ADDF',
-        '-': 'SUBF',
-        '*': 'MULF',
-        '/': 'DIVF',
-        'print': 'PRINTF',
-        'store': 'STOREF',
-        'var': 'VARF',
-        'load': 'LOADF'
-    },
-    'char': {
-        'mov': 'MOVB',
-        'print': 'PRINTB',
-        'store': 'STOREB',
-        'var': 'VARB',
-        'load': 'LOADB'
-    }
+OP_CODE_SUFFIX = {
+    'int': 'I',
+    'float': 'F',
+    'char': 'B',
+    'bool': 'I'
 }
 
+OP_CODES = {
+    'mov': 'MOV',
+    '+': 'ADD',
+    '-': 'SUB',
+    '*': 'MUL',
+    '/': 'DIV',
+    '&&': 'AND',
+    '||': 'OR',
+    'print': 'PRINT',
+    'store': 'STORE',
+    'var': 'VAR',
+    'load': 'LOAD'
+}
+OP_CODES.update(
+    dict.fromkeys(['<', '>', '<=', '>=', '==', '!='], "CMP")
+)
+
+def get_ir_code(op, type_name):
+    op_code = OP_CODES[op]
+    suffix = "" if op_code in {"AND", "OR"} else OP_CODE_SUFFIX[type_name]
+
+    return f"{op_code}{suffix}"
 
 class GenerateCode(ast.NodeVisitor):
     '''
@@ -182,22 +178,31 @@ class GenerateCode(ast.NodeVisitor):
 
     def visit_IntegerLiteral(self, node):
         target = self.new_register()
-        op_code = OP_CODES['int']['mov']
+        op_code = get_ir_code('mov', 'int')
         self.code.append((op_code, node.value, target))
         # Save the name of the register where the value was placed
         node.register = target
 
     def visit_FloatLiteral(self, node):
         target = self.new_register()
-        op_code = OP_CODES['float']['mov']
+        op_code = get_ir_code('mov', 'float')
         self.code.append((op_code, node.value, target))
         node.register = target
 
     def visit_CharLiteral(self, node):
         target = self.new_register()
-        op_code = OP_CODES['char']['mov']
+        op_code = get_ir_code('mov', 'char')
         # We treat chars as their ascii value
         self.code.append((op_code, ord(node.value), target))
+        # This is just to remember where the literal was put in
+        node.register = target
+
+    def visit_BoolLiteral(self, node):
+        target = self.new_register()
+        op_code = get_ir_code('mov', 'bool')
+        # We treat chars as their ascii value
+        value = 1 if node.value == "true" else 0
+        self.code.append((op_code, value, target))
         # This is just to remember where the literal was put in
         node.register = target
 
@@ -206,10 +211,14 @@ class GenerateCode(ast.NodeVisitor):
         self.visit(node.right)
         operator = node.op
 
-        op_code = OP_CODES[node.type.name][operator]
+        op_code = get_ir_code(operator, node.left.type.name)
 
         target = self.new_register()
-        inst = (op_code, node.left.register, node.right.register, target)
+        if op_code.startswith('CMP'):
+            inst = (op_code, operator, node.left.register, node.right.register, target)
+        else:
+            inst = (op_code, node.left.register, node.right.register, target)
+
         self.code.append(inst)
         node.register = target
 
@@ -218,8 +227,8 @@ class GenerateCode(ast.NodeVisitor):
         operator = node.op
 
         if operator == "-":
-            sub_op_code = OP_CODES[node.type.name][operator]
-            mov_op_code = OP_CODES[node.type.name]['mov']
+            sub_op_code = get_ir_code(operator, node.type.name)
+            mov_op_code = get_ir_code('mov', node.type.name)
 
             # To account for the fact that the machine code does not support
             # unary operations, we must load a 0 into a new register first
@@ -231,6 +240,17 @@ class GenerateCode(ast.NodeVisitor):
             inst = (sub_op_code, zero_target, node.right.register, target)
             self.code.append(inst)
             node.register = target
+        elif operator == "!":
+            # This is the boolean NOT operator
+            mov_op_code = get_ir_code('mov', node.type.name)
+            one_target = self.new_register()
+            one_inst = (mov_op_code, 1, one_target)
+            self.code.append(one_inst)
+
+            target = self.new_register()
+            inst = ('XOR', one_target, node.right.register, target)
+            self.code.append(inst)
+            node.register = target
         else:
             # The plus unary operator produces no extra code
             node.register = node.right.register
@@ -239,12 +259,12 @@ class GenerateCode(ast.NodeVisitor):
 
     def visit_PrintStatement(self, node):
         self.visit(node.value)
-        op_code = OP_CODES[node.value.type.name]['print']
+        op_code = get_ir_code('print', node.value.type.name)
         inst = (op_code, node.value.register)
         self.code.append(inst)
 
     def visit_ReadLocation(self, node):
-        op_code = OP_CODES[node.location.type.name]['load']
+        op_code = get_ir_code('load', node.location.type.name)
         register = self.new_register()
         inst = (op_code, node.location.name, register)
         self.code.append(inst)
@@ -252,33 +272,33 @@ class GenerateCode(ast.NodeVisitor):
 
     def visit_WriteLocation(self, node):
         self.visit(node.value)
-        op_code = OP_CODES[node.location.type.name]['store']
+        op_code = get_ir_code('store', node.location.type.name)
         inst = (op_code, node.value.register, node.location.name)
         self.code.append(inst)
-        # node.register = register
 
     def visit_ConstDeclaration(self, node):
         self.visit(node.value)
 
         # First we must declare the variable
-        op_code = OP_CODES[node.type.name]['var']
+        op_code = get_ir_code('var', node.type.name)
         inst = (op_code, node.name)
         self.code.append(inst)
 
-        op_code = OP_CODES[node.type.name]['store']
+        # op_code = OP_CODES[node.type.name]['store']
+        op_code = get_ir_code('store', node.type.name)
         inst = (op_code, node.value.register, node.name)
         self.code.append(inst)
 
     def visit_VarDeclaration(self, node):
         self.visit(node.datatype)
 
-        op_code = OP_CODES[node.type.name]['var']
+        op_code = get_ir_code('var', node.type.name)
         def_inst = (op_code, node.name)
 
         if node.value:
             self.visit(node.value)
             self.code.append(def_inst)
-            op_code = OP_CODES[node.type.name]['store']
+            op_code = get_ir_code('store', node.type.name)
             inst = (op_code, node.value.register, node.name)
             self.code.append(inst)
         else:
