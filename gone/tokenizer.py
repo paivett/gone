@@ -29,7 +29,7 @@ text.  Note: Additional features will be added in later projects.
 
 Reserved Keywords:
     CONST   : 'const'
-    VAR     : 'var'  
+    VAR     : 'var'
     PRINT   : 'print'
 
 Identifiers (Same rules as for Python):
@@ -67,8 +67,8 @@ Comments:  To be ignored by your lexer
 
 Errors: Your lexer must recognized and report the following error messages:
 
-     lineno: Illegal char 'c'         
-     lineno: Unterminated character constant     
+     lineno: Illegal char 'c'
+     lineno: Unterminated character constant
      lineno: Unterminated comment
 
 Testing
@@ -105,16 +105,16 @@ class GoneLexer(Lexer):
 
     tokens = {
         # keywords
-        'PRINT',
-                 
+        'PRINT', 'CONST', 'ELSE', 'EXTERN', 'FALSE', 'FUNC', 'IF', 'RETURN', 'TRUE', 'WHILE', 'VAR',
+
         # Identifiers
-        'ID', 
+        'ID',
 
         # Literals
-        'INTEGER',
+        'INTEGER', 'FLOAT', 'CHAR',
 
-        # Operators 
-        'PLUS', 'MINUS', 
+        # Operators
+        'PLUS', 'MINUS', 'TIMES', 'DIVIDE', 'ASSIGN', 'SEMI',
 
         # Other symbols
         'LPAREN', 'RPAREN',
@@ -130,7 +130,7 @@ class GoneLexer(Lexer):
     # ----------------------------------------------------------------------
     # Ignored patterns.  You'll need to supply appropriate regexes.
     # For example:
-    #    
+    #
     #    ignore_COMMENT = r'regex for a block-style-comment'
     #
     # or
@@ -141,28 +141,44 @@ class GoneLexer(Lexer):
     #        return None
     #
 
-    # block-style comment (/* ... */)
+    @_(r'/\*(.|\n)*?\*/')
+    def BLOCK_COMMENT(self, token):
+        # We must make sure to move forward the line count for multiline
+        # comments !
+        self.lineno += token.value.count('\n')
+        return None
 
-    # line-style comment (//...)
+    @_(r'//.*')
+    def LINE_COMMENT(self, token):
+        # For this case, it's not necessary to parse any newline
+        return None
 
-    # One or more newlines \n\n\n...
+    @_(r'\n+')
+    def NEWLINE(self, token):
+        self.lineno += token.value.count('\n')
 
     # ----------------------------------------------------------------------
     # *** YOU MUST COMPLETE : write the regexs indicated below ***
-    # 
-    # Tokens for simple symbols: + - * / = ( ) ; 
     #
-    # Caution: Definition order matters. Longer symbols should appear 
+    # Tokens for simple symbols: + - * / = ( ) ;
+    #
+    # Caution: Definition order matters. Longer symbols should appear
     # before shorter symbols that are a substring (for example, the
     # pattern for <= should go before <).
 
     PLUS = r'\+'      # Regex for a single plus sign
     MINUS = r'-'      # Regex for a single minur sign
+    TIMES = r'\*'
+    DIVIDE = r'/'
+    ASSIGN = r'='
+    SEMI = r';'
+    LPAREN = r'\('
+    RPAREN = r'\)'
 
     # ----------------------------------------------------------------------
     # *** YOU MUST COMPLETE : write the regexs and additional code below ***
     #
-    # Tokens for literals, INTEGER, FLOAT, STRING. 
+    # Tokens for literals, INTEGER, FLOAT, STRING.
 
     # Floating point constant.   You must recognize floating point numbers in
     # the following formats:
@@ -171,14 +187,15 @@ class GoneLexer(Lexer):
     #   123.
     #   .123
     #
-    # Bonus: Recognize floating point numbers in scientific notation 
+    # Bonus: Recognize floating point numbers in scientific notation
     #
     #   1.23e1
     #   1.23e+1
     #   1.23e-1
     #   1e1
 
-    # ----- YOU IMPLEMENT
+    FLOAT = r'(\d+\.\d*)|(\.\d+)'
+    # (\d*\.(\d)*[eE][+-]?\d+)|(\d+[eE][+-]?\d+)
 
     # Integer literal
     #
@@ -186,7 +203,8 @@ class GoneLexer(Lexer):
     #
     # Bonus: Recognize integers in different bases such as 0x1a, 0o13 or 0b111011.
 
-    # ----- YOU IMPLEMENT
+    # INTEGER = r'(0x[0-9ABCDEF]+)|(0b[01]+)|(0o[0-5]+)|\d+'
+    INTEGER = r'\d+'
 
     # Character constant. You must recognize a single letter enclosed in single quotes
     # For example:
@@ -200,28 +218,45 @@ class GoneLexer(Lexer):
     #     '\''    - Quote
     #     '\xhh'  - Generic byte
 
-    # ----- YOU IMPLEMENT
+    CHAR = r"'((\\n)|(\\x[0-9a-f]{2})|(\\')|(\\\\)|.)'"
 
     # ----------------------------------------------------------------------
     # *** YOU MUST COMPLETE : Write the regex and add keywords ***
     #
-    # Identifiers and keywords. 
+    # Identifiers and keywords.
     #
     # Match a raw identifier.  Identifiers follow the same rules as Python.
     # That is, they start with a letter or underscore (_) and can contain
     # an arbitrary number of letters, digits, or underscores after that.
-    # Language keywords such as "if" and "while" are also matched as 
+    # Language keywords such as "if" and "while" are also matched as
     # identifiers. You need to catch these and change their token type
     # to match the appropriate keyword.
 
-    # ----- YOU IMPLEMENT
+    @_(r'[a-zA-Z_][a-zA-Z0-9_]*')
+    def ID(self, t):
+        keywords = {
+            'const',
+            'else',
+            'extern',
+            'false',
+            'func',
+            'if',
+            'print',
+            'return',
+            'true',
+            'while',
+            'var'
+        }
+        if t.value in keywords:
+            t.type = t.value.upper()
+        return t
 
     # ----------------------------------------------------------------------
     # Bad character error handling
     def error(self, t):
         error(self.lineno,"Illegal character %r" % t.value[0])
         self.index += 1
-    
+
 # ----------------------------------------------------------------------
 #                DO NOT CHANGE ANYTHING BELOW THIS PART
 #
@@ -235,7 +270,7 @@ def main():
     Main program. For debugging purposes.
     '''
     import sys
-    
+
     if len(sys.argv) != 2:
         sys.stderr.write("Usage: python3 -m gone.tokenizer filename\n")
         raise SystemExit(1)
