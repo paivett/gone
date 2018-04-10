@@ -90,6 +90,8 @@ class GenerateLLVM(object):
         # the intermediate code.
         self.temps = {}
 
+        self.blocks = {}
+
         # Initialize the runtime library functions (see below)
         self.declare_runtime_library()
 
@@ -131,6 +133,14 @@ class GenerateLLVM(object):
         # Add a return statement.  Note, at this point, we don't really have
         # user-defined functions so this is a bit of hack--it may be removed later.
         self.builder.ret_void()
+
+    def get_block(self, block_name):
+        block = self.blocks.get(block_name)
+        if block is None:
+            block = self.function.append_basic_block(block_name)
+            self.blocks[block_name] = block
+
+        return block
 
     # ----------------------------------------------------------------------
     # Opcode implementation.   You must implement the opcodes.  A few
@@ -229,6 +239,19 @@ class GenerateLLVM(object):
 
     def emit_XOR(self, left, right, target):
         self.temps[target] = self.builder.xor(self.temps[left], self.temps[right], target)
+
+    def emit_LABEL(self, lbl_name):
+        block = self.get_block(lbl_name)
+        self.builder.position_at_end(block)
+
+    def emit_BRANCH(self, dst_label):
+        self.builder.branch(self.get_block(dst_label))
+
+    def emit_CBRANCH(self, test_target, true_label, false_label):
+        true_block = self.get_block(true_label)
+        false_block = self.get_block(false_label)
+        testvar = self.temps[test_target]
+        self.builder.cbranch(self.builder.trunc(testvar, IntType(1)), true_block, false_block)
 
 #######################################################################
 #                      TESTING/MAIN PROGRAM

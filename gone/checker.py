@@ -194,6 +194,27 @@ class CheckProgramVisitor(NodeVisitor):
     def visit_PrintStatement(self, node):
         self.visit(node.value)
 
+    def visit_IfStatement(self, node):
+        self.visit(node.condition)
+
+        cond_type = node.condition.type
+        if cond_type:
+            if issubclass(node.condition.type, BoolType):
+                self.visit(node.true_block)
+                self.visit(node.false_block)
+            else:
+                error(node.lineno, f"'Condition must be of type 'bool' but got type '{cond_type.name}'")
+
+    def visit_WhileStatement(self, node):
+        self.visit(node.condition)
+
+        cond_type = node.condition.type
+        if cond_type:
+            if issubclass(node.condition.type, BoolType):
+                self.visit(node.body)
+            else:
+                error(node.lineno, f"'Condition must be of type 'bool' but got type '{cond_type.name}'")
+
     def visit_BinOp(self, node):
         # For operators, you need to visit each operand separately.  You'll
         # then need to make sure the types and operator are all compatible.

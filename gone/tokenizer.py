@@ -105,19 +105,22 @@ class GoneLexer(Lexer):
 
     tokens = {
         # keywords
-        'PRINT', 'CONST', 'ELSE', 'EXTERN', 'FALSE', 'FUNC', 'IF', 'RETURN', 'TRUE', 'WHILE', 'VAR',
+        'PRINT', 'CONST', 'ELSE', 'EXTERN', 'FUNC', 'IF', 'RETURN', 'WHILE', 'VAR',
 
         # Identifiers
         'ID',
 
         # Literals
-        'INTEGER', 'FLOAT', 'CHAR',
+        'INTEGER', 'FLOAT', 'CHAR', 'BOOL',
 
         # Operators
         'PLUS', 'MINUS', 'TIMES', 'DIVIDE', 'ASSIGN', 'SEMI',
 
+        # Bool operators
+        'LE', 'LT', 'GE', 'GT', 'EQ', 'NE', 'AND', 'OR', 'NOT',
+
         # Other symbols
-        'LPAREN', 'RPAREN',
+        'LPAREN', 'RPAREN', 'LBRACE', 'RBRACE',
     }
 
     # ----------------------------------------------------------------------
@@ -166,6 +169,16 @@ class GoneLexer(Lexer):
     # before shorter symbols that are a substring (for example, the
     # pattern for <= should go before <).
 
+    LE = r'<='
+    LT = r'<'
+    GE = r'>='
+    GT = r'>'
+    EQ = r'=='
+    NE = r'!='
+    AND = r'&&'
+    OR = r'\|\|'
+    NOT = r'!'
+
     PLUS = r'\+'      # Regex for a single plus sign
     MINUS = r'-'      # Regex for a single minur sign
     TIMES = r'\*'
@@ -174,6 +187,9 @@ class GoneLexer(Lexer):
     SEMI = r';'
     LPAREN = r'\('
     RPAREN = r'\)'
+
+    LBRACE = r'{'
+    RBRACE = r'}'
 
     # ----------------------------------------------------------------------
     # *** YOU MUST COMPLETE : write the regexs and additional code below ***
@@ -218,6 +234,8 @@ class GoneLexer(Lexer):
 
     CHAR = r"'((\\n)|(\\x[0-9a-f]{2})|(\\')|(\\\\)|.)'"
 
+    BOOL = r'(true)|(false)'
+
     # ----------------------------------------------------------------------
     # *** YOU MUST COMPLETE : Write the regex and add keywords ***
     #
@@ -236,12 +254,10 @@ class GoneLexer(Lexer):
             'const',
             'else',
             'extern',
-            'false',
             'func',
             'if',
             'print',
             'return',
-            'true',
             'while',
             'var'
         }

@@ -112,6 +112,15 @@ class CharLiteral(Literal):
 class BoolLiteral(Literal):
     value : str
 
+class IfStatement(Statement):
+    condition : Expression
+    true_block : [Statement]
+    false_block : [Statement]
+
+class WhileStatement(Statement):
+    condition : Expression
+    body : [Statement]
+
 class BinOp(Expression):
     '''
     A Binary operator such as 2 + 3 or x * y
@@ -151,7 +160,7 @@ class SimpleLocation(Location):
 class ReadLocation(Expression):
     location: Location
 
-class WriteLocation(Expression):
+class WriteLocation(Statement):
     location: Location
     value : Expression
 

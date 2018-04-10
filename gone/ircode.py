@@ -121,7 +121,7 @@ sample output. Work through each file to complete the project.
 
 from . import ast
 
-OP_CODE_SUFFIX = {
+OP_CODE_TYPE_SUFFIX = {
     'int': 'I',
     'float': 'F',
     'char': 'B',
@@ -139,15 +139,18 @@ OP_CODES = {
     'print': 'PRINT',
     'store': 'STORE',
     'var': 'VAR',
-    'load': 'LOAD'
+    'load': 'LOAD',
+    'label': 'LABEL',
+    'cbranch': 'CBRANCH', # Conditional branch
+    'branch': 'BRANCH' # Unconditional branch
 }
 OP_CODES.update(
     dict.fromkeys(['<', '>', '<=', '>=', '==', '!='], "CMP")
 )
 
-def get_ir_code(op, type_name):
-    op_code = OP_CODES[op]
-    suffix = "" if op_code in {"AND", "OR"} else OP_CODE_SUFFIX[type_name]
+def get_op_code(operation, type_name=None):
+    op_code = OP_CODES[operation]
+    suffix = "" if not type_name else OP_CODE_TYPE_SUFFIX[type_name]
 
     return f"{op_code}{suffix}"
 
@@ -159,6 +162,9 @@ class GenerateCode(ast.NodeVisitor):
         # counter for registers
         self.register_count = 0
 
+        # counter for block labels
+        self.label_count = 0
+
         # The generated code (list of tuples)
         self.code = []
 
@@ -169,6 +175,10 @@ class GenerateCode(ast.NodeVisitor):
          self.register_count += 1
          return f'R{self.register_count}'
 
+    def new_label(self):
+        self.label_count += 1
+        return f"L{self.label_count}"
+
     # You must implement visit_Nodename methods for all of the other
     # AST nodes.  In your code, you will need to make instructions
     # and append them to the self.code list.
@@ -178,20 +188,20 @@ class GenerateCode(ast.NodeVisitor):
 
     def visit_IntegerLiteral(self, node):
         target = self.new_register()
-        op_code = get_ir_code('mov', 'int')
+        op_code = get_op_code('mov', 'int')
         self.code.append((op_code, node.value, target))
         # Save the name of the register where the value was placed
         node.register = target
 
     def visit_FloatLiteral(self, node):
         target = self.new_register()
-        op_code = get_ir_code('mov', 'float')
+        op_code = get_op_code('mov', 'float')
         self.code.append((op_code, node.value, target))
         node.register = target
 
     def visit_CharLiteral(self, node):
         target = self.new_register()
-        op_code = get_ir_code('mov', 'char')
+        op_code = get_op_code('mov', 'char')
         # We treat chars as their ascii value
         self.code.append((op_code, ord(node.value), target))
         # This is just to remember where the literal was put in
@@ -199,7 +209,7 @@ class GenerateCode(ast.NodeVisitor):
 
     def visit_BoolLiteral(self, node):
         target = self.new_register()
-        op_code = get_ir_code('mov', 'bool')
+        op_code = get_op_code('mov', 'bool')
         # We treat chars as their ascii value
         value = 1 if node.value == "true" else 0
         self.code.append((op_code, value, target))
@@ -211,7 +221,7 @@ class GenerateCode(ast.NodeVisitor):
         self.visit(node.right)
         operator = node.op
 
-        op_code = get_ir_code(operator, node.left.type.name)
+        op_code = get_op_code(operator, node.left.type.name)
 
         target = self.new_register()
         if op_code.startswith('CMP'):
@@ -227,8 +237,8 @@ class GenerateCode(ast.NodeVisitor):
         operator = node.op
 
         if operator == "-":
-            sub_op_code = get_ir_code(operator, node.type.name)
-            mov_op_code = get_ir_code('mov', node.type.name)
+            sub_op_code = get_op_code(operator, node.type.name)
+            mov_op_code = get_op_code('mov', node.type.name)
 
             # To account for the fact that the machine code does not support
             # unary operations, we must load a 0 into a new register first
@@ -242,7 +252,7 @@ class GenerateCode(ast.NodeVisitor):
             node.register = target
         elif operator == "!":
             # This is the boolean NOT operator
-            mov_op_code = get_ir_code('mov', node.type.name)
+            mov_op_code = get_op_code('mov', node.type.name)
             one_target = self.new_register()
             one_inst = (mov_op_code, 1, one_target)
             self.code.append(one_inst)
@@ -259,12 +269,12 @@ class GenerateCode(ast.NodeVisitor):
 
     def visit_PrintStatement(self, node):
         self.visit(node.value)
-        op_code = get_ir_code('print', node.value.type.name)
+        op_code = get_op_code('print', node.value.type.name)
         inst = (op_code, node.value.register)
         self.code.append(inst)
 
     def visit_ReadLocation(self, node):
-        op_code = get_ir_code('load', node.location.type.name)
+        op_code = get_op_code('load', node.location.type.name)
         register = self.new_register()
         inst = (op_code, node.location.name, register)
         self.code.append(inst)
@@ -272,7 +282,7 @@ class GenerateCode(ast.NodeVisitor):
 
     def visit_WriteLocation(self, node):
         self.visit(node.value)
-        op_code = get_ir_code('store', node.location.type.name)
+        op_code = get_op_code('store', node.location.type.name)
         inst = (op_code, node.value.register, node.location.name)
         self.code.append(inst)
 
@@ -280,29 +290,85 @@ class GenerateCode(ast.NodeVisitor):
         self.visit(node.value)
 
         # First we must declare the variable
-        op_code = get_ir_code('var', node.type.name)
+        op_code = get_op_code('var', node.type.name)
         inst = (op_code, node.name)
         self.code.append(inst)
 
         # op_code = OP_CODES[node.type.name]['store']
-        op_code = get_ir_code('store', node.type.name)
+        op_code = get_op_code('store', node.type.name)
         inst = (op_code, node.value.register, node.name)
         self.code.append(inst)
 
     def visit_VarDeclaration(self, node):
         self.visit(node.datatype)
 
-        op_code = get_ir_code('var', node.type.name)
+        op_code = get_op_code('var', node.type.name)
         def_inst = (op_code, node.name)
 
         if node.value:
             self.visit(node.value)
             self.code.append(def_inst)
-            op_code = get_ir_code('store', node.type.name)
+            op_code = get_op_code('store', node.type.name)
             inst = (op_code, node.value.register, node.name)
             self.code.append(inst)
         else:
             self.code.append(def_inst)
+
+    def visit_IfStatement(self, node):
+        self.visit(node.condition)
+
+        # Generate labels for both branches
+        f_label = self.new_label()
+        t_label = self.new_label()
+        merge_label = self.new_label()
+        lbl_op_code = get_op_code('label')
+
+        # Insert the CBRANCH instruction
+        cbranch_op_code = get_op_code('cbranch')
+        self.code.append((cbranch_op_code, node.condition.register, t_label, f_label))
+
+        # Now, the code for the true branch
+        self.code.append((lbl_op_code, t_label))
+        self.visit(node.true_block)
+        # And we must go to the merge label
+        branch_op_code = get_op_code('branch')
+        self.code.append((branch_op_code, merge_label))
+
+        # Generate label for false block
+        self.code.append((lbl_op_code, f_label))
+        self.visit(node.false_block)
+        self.code.append((branch_op_code, merge_label))
+
+        # Now we insert the merge label
+        self.code.append((lbl_op_code, merge_label))
+
+    def visit_WhileStatement(self, node):
+        # Generate labels for while handling
+        top_label = self.new_label() # This label is before the condition evaluation
+        start_label = self.new_label() # This label is just after the condition
+        merge_label = self.new_label() # This label is for exiting the loop
+        lbl_op_code = get_op_code('label')
+        branch_op_code = get_op_code('branch')
+
+        # Insert the CBRANCH instruction
+        # This is required because LLVM requires that each block ends with a
+        # BRANCH
+        self.code.append((branch_op_code, top_label))
+        # Now begins the block with the CBRANCH
+        self.code.append((lbl_op_code, top_label))
+        self.visit(node.condition) # Generate the CMP instruction
+        cbranch_op_code = get_op_code('cbranch')
+        self.code.append((cbranch_op_code, node.condition.register, start_label, merge_label))
+
+        # Now, the code for the true branch
+        self.code.append((lbl_op_code, start_label))
+        self.visit(node.body)
+        # And we must go to the merge label
+
+        self.code.append((branch_op_code, top_label))
+
+        # Now we insert the merge label
+        self.code.append((lbl_op_code, merge_label))
 
 # ----------------------------------------------------------------------
 #                          TESTING/MAIN PROGRAM

@@ -7,8 +7,11 @@ formal BNF of the language follows.  Your task is to write parsing
 rules and build the AST for this grammar using SLY.  The following
 grammar is partial.  More features get added in later projects.
 
-program : statements
+program : blocks
         | empty
+
+block : statements
+      | empty
 
 statements :  statements statement
            |  statement
@@ -17,6 +20,8 @@ statement :  const_declaration
           |  var_declaration
           |  assign_statement
           |  print_statement
+          |  if_statement
+          |  while_statement
 
 const_declaration : CONST ID = expression ;
 
@@ -135,6 +140,16 @@ class GoneParser(Parser):
     #
     # Afterwards, add features by looking at the code in Tests/parsetest1-6.g
 
+    @_("statements")
+    def block(self, p):
+        return p.statements
+
+    @_("")
+    def block(self, p):
+        return []
+
+    ##########################################
+
     @_('statement')
     def statements(self, p):
         return [p.statement]
@@ -161,6 +176,30 @@ class GoneParser(Parser):
     @_('assign_statement')
     def statement(self, p):
         return p.assign_statement
+
+    @_('if_statement')
+    def statement(self, p):
+        return p.if_statement
+
+    @_('while_statement')
+    def statement(self, p):
+        return p.while_statement
+
+    ##########################################
+
+    @_('IF expression LBRACE block RBRACE ELSE LBRACE block RBRACE')
+    def if_statement(self, p):
+        return IfStatement(p.expression, p[3], p[7], lineno=p.lineno)
+
+    @_('IF expression LBRACE block RBRACE')
+    def if_statement(self, p):
+        return IfStatement(p.expression, p[3], [], lineno=p.lineno)
+
+    ###########################################
+
+    @_('WHILE expression LBRACE block RBRACE')
+    def while_statement(self, p):
+        return WhileStatement(p.expression, p.block, lineno=p.lineno)
 
     ###########################################
 
