@@ -11,7 +11,7 @@ top of this file.  You will need to add more on your own.
 
 # DO NOT MODIFY
 class AST(object):
-    _nodes = { } 
+    _nodes = { }
 
     @classmethod
     def __init_subclass__(cls):
@@ -21,7 +21,7 @@ class AST(object):
             return
 
         fields = list(cls.__annotations__.items())
-                
+
         def __init__(self, *args, **kwargs):
             if len(args) != len(fields):
                 raise TypeError(f'Expected {len(fields)} arguments')
@@ -87,6 +87,12 @@ class Literal(Expression):
     '''
     pass
 
+class DataType(AST):
+    pass
+
+class Location(AST):
+    pass
+
 # Concrete AST nodes
 class PrintStatement(Statement):
     '''
@@ -111,12 +117,47 @@ class BinOp(Expression):
     left  : Expression
     right : Expression
 
+class UnaryOp(Expression):
+    '''
+    A Unary operator such as -2 or +3
+    '''
+    op    : str
+    right : Expression
+
+class ConstDeclaration(Statement):
+    '''
+    const name = value ;
+    '''
+    name  : str
+    value : Expression
+
+class SimpleType(DataType):
+    name : str
+
+class VarDeclaration(Statement):
+    '''
+    var name datatype [ = value ];
+    '''
+    name     : str
+    datatype : DataType
+    value    : (Expression, type(None))    # Optional
+
+class SimpleLocation(Location):
+    name : str
+
+class ReadLocation(Expression):
+    location: Location
+
+class WriteLocation(Expression):
+    location: Location
+    value : Expression
+
 # ----------------------------------------------------------------------
 #                  DO NOT MODIFY ANYTHING BELOW HERE
 # ----------------------------------------------------------------------
 
 # The following classes for visiting and rewriting the AST are taken
-# from Python's ast module.   
+# from Python's ast module.
 
 # DO NOT MODIFY
 class NodeVisitor(object):
@@ -153,7 +194,7 @@ class NodeVisitor(object):
             method = 'visit_' + node.__class__.__name__
             visitor = getattr(self, method, self.generic_visit)
             visitor(node)
-    
+
     def generic_visit(self,node):
         '''
         Method executed if no applicable visit_ method can be found.

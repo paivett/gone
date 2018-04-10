@@ -194,8 +194,7 @@ class GoneLexer(Lexer):
     #   1.23e-1
     #   1e1
 
-    FLOAT = r'(\d+\.\d*)|(\.\d+)'
-    # (\d*\.(\d)*[eE][+-]?\d+)|(\d+[eE][+-]?\d+)
+    FLOAT = r'(((\d+\.\d*)|(\.\d+))([eE][+-]?\d+)?)|(\d+[eE][+-]?\d+)'
 
     # Integer literal
     #
@@ -203,8 +202,7 @@ class GoneLexer(Lexer):
     #
     # Bonus: Recognize integers in different bases such as 0x1a, 0o13 or 0b111011.
 
-    # INTEGER = r'(0x[0-9ABCDEF]+)|(0b[01]+)|(0o[0-5]+)|\d+'
-    INTEGER = r'\d+'
+    INTEGER = r'(0x[0-9ABCDEF]+)|(0b[01]+)|(0o[0-5]+)|\d+'
 
     # Character constant. You must recognize a single letter enclosed in single quotes
     # For example:
