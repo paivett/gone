@@ -1,0 +1,2 @@
+llvmlite
+git+https://github.com/dabeaz/sly.git#egg=sly
