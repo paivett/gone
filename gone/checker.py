@@ -344,6 +344,10 @@ class CheckProgramVisitor(NodeVisitor):
                 {param.name: param for param in node.params},
                 self.temp_symbols
             )
+
+            # Add the function to the available functions so recursive calls work
+            self.functions[node.name] = node
+
             # Set the expected return value to observe
             self.expected_ret_type = node.datatype.type
 
@@ -351,10 +355,9 @@ class CheckProgramVisitor(NodeVisitor):
 
             if not self.current_ret_type:
                 error(node.lineno, f"Function '{node.name}' has no return statement")
-            elif self.current_ret_type == self.expected_ret_type:
-                # We must add the function declaration as available for
-                # future calls
-                self.functions[node.name] = node
+            elif self.current_ret_type != self.expected_ret_type:
+                error(node.lineno,
+                      f"Function '{node.name}' returns type '{self.current_ret_type.name}' but '{self.expected_ret_type.name}' was expected!")
 
             self.symbols = self.temp_symbols
             self.temp_symbols = { }
