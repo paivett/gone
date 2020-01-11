@@ -129,7 +129,9 @@ class CheckProgramVisitor(NodeVisitor):
         self.expected_ret_type = None
 
         # And here we save the observed return type when checking a function
-        self.current_ret_type = None
+        # Since a function may have more than one return point, we save a set
+        # of types
+        self.current_ret_type = set()
 
         # A table of function definitions
         self.functions = { }
@@ -312,7 +314,7 @@ class CheckProgramVisitor(NodeVisitor):
         # Propagate return value type as a special property ret_type, only
         # to be checked at function declaration checking
         if self.expected_ret_type:
-            self.current_ret_type = node.value.type
+            self.current_ret_type.add(node.value.type)
             if node.value.type and node.value.type != self.expected_ret_type:
                 error(node.lineno, f"Function returns '{self.expected_ret_type.name}' but return statement value is of type '{node.value.type.name}'")
         else:
@@ -355,14 +357,15 @@ class CheckProgramVisitor(NodeVisitor):
 
             if not self.current_ret_type:
                 error(node.lineno, f"Function '{node.name}' has no return statement")
-            elif self.current_ret_type != self.expected_ret_type:
+            elif self.current_ret_type != {self.expected_ret_type}:
+                wrong_types = ", ".join(map(str, self.current_ret_type - {self.expected_ret_type}))
                 error(node.lineno,
-                      f"Function '{node.name}' returns type '{self.current_ret_type.name}' but '{self.expected_ret_type.name}' was expected!")
+                      f"Function '{node.name}' returns more types than expected!")
 
             self.symbols = self.temp_symbols
             self.temp_symbols = { }
             self.expected_ret_type = None
-            self.current_ret_type = None
+            self.current_ret_type = set()
 
     def visit_FuncCall(self, node):
         if node.name not in self.functions:
