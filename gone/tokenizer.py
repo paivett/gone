@@ -242,7 +242,7 @@ class GoneLexer(Lexer):
     #
     # Identifiers and keywords.
     #
-    # Match a raw identifier.  Identifiers follow the same rules as Python.
+    # Match a raw identifier. Identifiers follow the same rules as Python.
     # That is, they start with a letter or underscore (_) and can contain
     # an arbitrary number of letters, digits, or underscores after that.
     # Language keywords such as "if" and "while" are also matched as

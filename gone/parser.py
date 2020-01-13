@@ -44,6 +44,9 @@ assign_statement : location = expression ;
 
 print_statement : PRINT expression ;
 
+if_statement: IF expression LBRACE block RBRACE
+            | IF expression LBRACE block RBRACE ELSE LBRACE block RBRACE
+
 expression :  + expression
            |  - expression
            |  ! expression
